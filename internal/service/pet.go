@@ -11,7 +11,7 @@ import (
 type PetService interface {
 	AddPet(ctx context.Context, pet *model.Pet) error
 	UpdatePet(ctx context.Context, pet *model.Pet) error
-	FindPetsByStatus(ctx context.Context, status []string) ([]*model.Pet, error)
+	FindPetsByStatus(ctx context.Context, status string) ([]*model.Pet, error)
 	GetPetById(ctx context.Context, id int64) (*model.Pet, error)
 	UpdatePetWithForm(ctx context.Context, id int64, name string, status string) error
 	DeletePet(ctx context.Context, id int64) error
@@ -44,9 +44,6 @@ func (s *petService) UpdatePet(ctx context.Context, pet *model.Pet) error {
 	if pet.Name == "" {
 		return errors.New("pet name is required")
 	}
-	if pet.Status == "" {
-		return errors.New("pet status is required")
-	}
 	_, err := s.repo.GetPetByID(ctx, pet.ID)
 	if err != nil {
 		return fmt.Errorf("pet with id %d not found", pet.ID)
@@ -54,21 +51,10 @@ func (s *petService) UpdatePet(ctx context.Context, pet *model.Pet) error {
 	return s.repo.UpdatePet(ctx, pet)
 }
 
-func (s *petService) FindPetsByStatus(ctx context.Context, status []string) ([]*model.Pet, error) {
-	if len(status) == 0 {
-		return nil, errors.New("at least one status is required")
-	}
-
-	validStatus := map[string]bool{
-		"available": true,
-		"pending":   true,
-		"sold":      true,
-	}
-
-	for _, s := range status {
-		if !validStatus[s] {
-			return nil, errors.New("invalid status value")
-		}
+func (s *petService) FindPetsByStatus(ctx context.Context, status string) ([]*model.Pet, error) {
+	// Валидация статуса
+	if status != "available" && status != "pending" && status != "sold" {
+		return nil, errors.New("неверный статус")
 	}
 
 	return s.repo.FindPetsByStatus(ctx, status)

@@ -18,3 +18,11 @@ type LoginRequest struct {
 type LoginResponse struct {
 	Token string `json:"token"`
 }
+
+type UpdateUserRequest struct {
+	FirstName *string `json:"firstName,omitempty"`
+	LastName  *string `json:"lastName,omitempty"`
+	Email     *string `json:"email,omitempty"`
+	Password  *string `json:"password,omitempty"`
+	Phone     *string `json:"phone,omitempty"`
+}

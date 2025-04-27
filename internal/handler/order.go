@@ -5,6 +5,7 @@ import (
 	"PetStore/internal/service"
 	"PetStore/transport"
 	"encoding/json"
+	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strconv"
 )
@@ -73,7 +74,7 @@ func (h *StoreHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 // @Security ApiKeyAuth
 // @Router /store/order/{orderId} [get]
 func (h *StoreHandler) GetOrderById(w http.ResponseWriter, r *http.Request) {
-	orderID, err := strconv.ParseInt("orderId", 10, 64)
+	orderID, err := strconv.ParseInt(chi.URLParam(r, "orderId"), 10, 64)
 	if err != nil {
 		h.responder.ErrorJSON(w, "invalid order ID", http.StatusBadRequest)
 		return

@@ -3,7 +3,9 @@ package main
 import (
 	"PetStore/internal/db"
 	"PetStore/internal/handler"
+	"PetStore/transport"
 	"context"
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
 	"os"
@@ -11,18 +13,23 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"PetStore/internal/repository"
 	"PetStore/internal/service"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/jwtauth/v5"
 )
 
+func init() {
+	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("Error loading .env file")
+	}
+}
 func main() {
 	// Загрузка конфигурации
 	ctx := context.Background()
-
+	transport := transport.JSONResponder{}
 	// Инициализация БД
 	dbPool, err := db.NewPostgresConnection(ctx)
 	if err != nil {
@@ -39,7 +46,7 @@ func main() {
 	petService := service.NewPetService(petRepo)
 	storeService := service.NewStoreService(storeRepo)
 
-	userHandler := handler.NewUserHandler(userService)
+	userHandler := handler.NewUserHandler(userService, transport)
 	petHandler := handler.NewPetHandler(petService)
 	storeHandler := handler.NewStoreHandler(storeService)
 
@@ -54,18 +61,31 @@ func main() {
 	// Public routes (не требуют аутентификации)
 	r.Group(func(r chi.Router) {
 		r.Post("/api/user", userHandler.CreateUser)
-		r.Post("/api/user/createWithArray", userHandler.CreateUsersWithArray)
+		r.Get("/api/user/createWithArray", userHandler.CreateUsersWithArray)
 		r.Post("/api/user/createWithList", userHandler.CreateUsersWithList)
 		r.Get("/api/user/login", userHandler.LoginUser)
 		r.Get("/api/user/logout", userHandler.LogoutUser)
+		r.Get("/api/user/{username}", userHandler.GetUserByName)
+		r.Post("/api/store/order", storeHandler.PlaceOrder)
+		r.Get("/api/store/order/{orderId}", storeHandler.GetOrderById)
+		r.Delete("/api/store/order/{orderId}", storeHandler.DeleteOrder)
 	})
 
 	// Protected routes (требуют JWT)
 	r.Group(func(r chi.Router) {
-		r.Use(jwtauth.Verifier(go)
+		r.Use(jwtauth.Verifier(jwtauth.New("HS256", []byte(os.Getenv("JWT_SECRET")), nil)))
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				token, _, _ := jwtauth.FromContext(r.Context())
+				if token == nil {
+					http.Error(w, "Forbidden", http.StatusForbidden) // 403
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		})
 
 		// User routes
-		r.Get("/api/user/{username}", userHandler.GetUserByName)
 		r.Put("/api/user/{username}", userHandler.UpdateUser)
 		r.Delete("/api/user/{username}", userHandler.DeleteUser)
 
@@ -76,20 +96,17 @@ func main() {
 		r.Get("/api/pet/{petId}", petHandler.GetPetById)
 		r.Post("/api/pet/{petId}", petHandler.UpdatePetWithForm)
 		r.Delete("/api/pet/{petId}", petHandler.DeletePet)
-
+		r.Post("/api/pet/{petId}", petHandler.UploadImage)
 		// Store routes
 		r.Get("/api/store/inventory", storeHandler.GetInventory)
-		r.Post("/api/store/order", storeHandler.PlaceOrder)
-		r.Get("/api/store/order/{orderId}", storeHandler.GetOrderById)
-		r.Delete("/api/store/order/{orderId}", storeHandler.DeleteOrder)
 	})
 
 	// Swagger UI (если используется)
-	r.Handle("/swagger/*", http.StripPrefix("/swagger/", http.FileServer(http.Dir("./swagger")))
+	r.Handle("/swagger/*", http.StripPrefix("/swagger/", http.FileServer(http.Dir("./swagger"))))
 
 	// HTTP сервер
 	srv := &http.Server{
-		Addr:         ":" + cfg.HTTPPort,
+		Addr:         ":" + os.Getenv("PORT"),
 		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -117,19 +134,4 @@ func main() {
 		log.Fatalf("Server shutdown error: %v", err)
 	}
 	log.Println("Server stopped")
-}
-
-func initDB(cfg config.DBConfig) (*pgxpool.Pool, error) {
-	connStr := "postgres://" + cfg.User + ":" + cfg.Password + "@" + cfg.Host + ":" + cfg.Port + "/" + cfg.Name + "?sslmode=" + cfg.SSLMode
-
-	poolConfig, err := pgxpool.ParseConfig(connStr)
-	if err != nil {
-		return nil, err
-	}
-
-	poolConfig.MaxConns = int32(cfg.MaxConnections)
-	poolConfig.MinConns = int32(cfg.MinConnections)
-	poolConfig.HealthCheckPeriod = 1 * time.Minute
-
-	return pgxpool.ConnectConfig(context.Background(), poolConfig)
 }

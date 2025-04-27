@@ -28,21 +28,17 @@ func (s *storeService) GetInventory(ctx context.Context) (map[string]int64, erro
 
 func (s *storeService) PlaceOrder(ctx context.Context, order *model.Order) error {
 	if order.UserID <= 0 {
-		return errors.New("неверный ID пользователя")
-		if order.PetID <= 0 {
-			return errors.New("invalid pet ID")
-		}
-		if order.Quantity <= 0 {
-			return errors.New("quantity must be positive")
-		}
-		if order.Status == "" {
-			return errors.New("status is required")
-		}
-
-		return s.repo.PlaceOrder(ctx, order)
+		return errors.New("invalid user ID")
 	}
-}
+	if order.PetID <= 0 {
+		return errors.New("invalid pet ID")
+	}
+	if order.Quantity <= 0 {
+		return errors.New("quantity must be positive")
+	}
 
+	return s.repo.PlaceOrder(ctx, order)
+}
 func (s *storeService) GetOrderById(ctx context.Context, id int64) (*model.Order, error) {
 	if id <= 0 {
 		return nil, errors.New("invalid order ID")

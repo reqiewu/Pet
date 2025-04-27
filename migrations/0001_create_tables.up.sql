@@ -9,7 +9,7 @@ CREATE TABLE users (
                        first_name VARCHAR(255),
                        last_name VARCHAR(255),
                        email VARCHAR(255) UNIQUE,
-                       password_hash VARCHAR(255) NOT NULL,
+                       password_hash VARCHAR(60) NOT NULL,
                        phone VARCHAR(50),
                        user_status INTEGER DEFAULT 1,
                        token TEXT
@@ -27,7 +27,7 @@ CREATE TABLE pet_tags (
                           name VARCHAR(255) NOT NULL
 );
 
--
+
 CREATE TABLE pets (
                       id SERIAL PRIMARY KEY,
                       name VARCHAR(255) NOT NULL,

@@ -5,7 +5,10 @@ import (
 	"PetStore/internal/service"
 	"PetStore/transport"
 	"encoding/json"
+	"fmt"
+	"github.com/go-chi/chi/v5"
 	"net/http"
+	"strings"
 )
 
 type UserHandler struct {
@@ -13,8 +16,8 @@ type UserHandler struct {
 	responder transport.JSONResponder
 }
 
-func NewUserHandler(service service.UserService) *UserHandler {
-	return &UserHandler{service: service}
+func NewUserHandler(service service.UserService, responder transport.JSONResponder) *UserHandler {
+	return &UserHandler{service: service, responder: responder}
 }
 
 // CreateUser godoc
@@ -37,7 +40,11 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		h.responder.ErrorJSON(w, "failed to create user", http.StatusBadRequest)
 		return
 	}
-	h.responder.WriteJSON(w, http.StatusCreated, "user created successfully")
+	response := map[string]interface{}{
+		"message": "user created successfully",
+		"id":      user.ID,
+	}
+	h.responder.WriteJSON(w, http.StatusCreated, response)
 }
 
 // CreateUsersWithArray godoc
@@ -51,16 +58,29 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) CreateUsersWithArray(w http.ResponseWriter, r *http.Request) {
 	var users []*model.User
 	if err := json.NewDecoder(r.Body).Decode(&users); err != nil {
-		h.responder.ErrorJSON(w, "invalid request body", http.StatusBadRequest)
+		h.responder.ErrorJSON(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if err := h.service.CreateUsersBatch(r.Context(), users); err != nil {
-		h.responder.ErrorJSON(w, "failed to create array", http.StatusBadRequest)
+	if len(users) == 0 {
+		h.responder.ErrorJSON(w, "empty users array", http.StatusBadRequest)
 		return
 	}
 
-	h.responder.WriteJSON(w, http.StatusCreated, "array created successfully")
+	ids, err := h.service.CreateUsersBatch(r.Context(), users)
+	if err != nil {
+		h.responder.ErrorJSON(w, "failed to create users: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	response := struct {
+		Message string  `json:"message"`
+		UserIDs []int64 `json:"userIds"`
+	}{
+		Message: fmt.Sprintf("Successfully created %d users", len(ids)),
+		UserIDs: ids,
+	}
+
+	h.responder.WriteJSON(w, http.StatusCreated, response)
 }
 
 // CreateUsersWithList godoc
@@ -78,12 +98,20 @@ func (h *UserHandler) CreateUsersWithList(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.service.CreateUsersBatch(r.Context(), users); err != nil {
-		h.responder.ErrorJSON(w, "failed to create list", http.StatusBadRequest)
+	ids, err := h.service.CreateUsersBatch(r.Context(), users)
+	if err != nil {
+		h.responder.ErrorJSON(w, "failed to create users: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	response := struct {
+		Message string  `json:"message"`
+		UserIDs []int64 `json:"userIds"`
+	}{
+		Message: fmt.Sprintf("Successfully created %d users", len(ids)),
+		UserIDs: ids,
+	}
 
-	h.responder.WriteJSON(w, http.StatusCreated, "list created successfully")
+	h.responder.WriteJSON(w, http.StatusCreated, response)
 }
 
 // LoginUser godoc
@@ -98,22 +126,30 @@ func (h *UserHandler) CreateUsersWithList(w http.ResponseWriter, r *http.Request
 func (h *UserHandler) LoginUser(w http.ResponseWriter, r *http.Request) {
 	var req model.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.responder.ErrorJSON(w, "invalid request body", http.StatusBadRequest)
+		h.responder.ErrorJSON(w, "invalid request format", http.StatusBadRequest)
 		return
 	}
 
 	if req.UserName == "" || req.Password == "" {
-		h.responder.ErrorJSON(w, "username or password is nil", http.StatusBadRequest)
+		h.responder.ErrorJSON(w, "username and password are required", http.StatusBadRequest)
 		return
 	}
 
 	token, err := h.service.LoginUser(r.Context(), req.UserName, req.Password)
 	if err != nil {
-		h.responder.ErrorJSON(w, "username or login is invalid", http.StatusBadRequest)
+		// Различаем типы ошибок для клиента
+		errorMsg := "authentication failed"
+		if strings.Contains(err.Error(), "user not found") {
+			errorMsg = "user not found"
+		} else if strings.Contains(err.Error(), "invalid password") {
+			errorMsg = "invalid password"
+		}
+
+		h.responder.ErrorJSON(w, errorMsg, http.StatusUnauthorized)
 		return
 	}
 
-	h.responder.WriteJSON(w, http.StatusOK, token)
+	h.responder.WriteJSON(w, http.StatusOK, model.LoginResponse{Token: token})
 }
 
 // LogoutUser godoc
@@ -139,17 +175,21 @@ func (h *UserHandler) LogoutUser(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} models.User
 // @Router /user/{username} [get]
 func (h *UserHandler) GetUserByName(w http.ResponseWriter, r *http.Request) {
-	username := r.URL.Query().Get("username")
-	if username == "" {
+	var request struct {
+		Username string `json:"username"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		h.responder.ErrorJSON(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if request.Username == "" {
 		h.responder.ErrorJSON(w, "username is empty", http.StatusBadRequest)
 		return
 	}
-	user, err := h.service.GetUserByUsername(r.Context(), username)
+	user, err := h.service.GetUserByUsername(r.Context(), request.Username)
 	if err != nil {
-		h.responder.ErrorJSON(w, "failed to get user", http.StatusNotFound)
-	}
-	if user == nil {
-		http.Error(w, "user not found", http.StatusNotFound)
+		h.responder.ErrorJSON(w, "user not found", http.StatusNotFound)
 		return
 	}
 
@@ -167,18 +207,48 @@ func (h *UserHandler) GetUserByName(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} models.User
 // @Router /user/{username} [put]
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	var user model.User
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+	username := chi.URLParam(r, "username")
+
+	var updateData model.UpdateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
 		h.responder.ErrorJSON(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.service.UpdateUser(r.Context(), &user); err != nil {
-		h.responder.ErrorJSON(w, "failed to update user", http.StatusBadRequest)
+	// Проверяем, что хотя бы одно поле передано для обновления
+	if updateData.FirstName == nil && updateData.LastName == nil &&
+		updateData.Email == nil && updateData.Password == nil &&
+		updateData.Phone == nil {
+		h.responder.ErrorJSON(w, "no valid fields provided for update", http.StatusBadRequest)
 		return
 	}
 
-	h.responder.WriteJSON(w, http.StatusOK, "user updated successfully")
+	// Преобразуем в map для репозитория
+	updateMap := make(map[string]interface{})
+	if updateData.FirstName != nil {
+		updateMap["first_name"] = *updateData.FirstName
+	}
+	if updateData.LastName != nil {
+		updateMap["last_name"] = *updateData.LastName
+	}
+	if updateData.Email != nil {
+		updateMap["email"] = *updateData.Email
+	}
+	if updateData.Password != nil {
+		updateMap["password"] = *updateData.Password
+	}
+	if updateData.Phone != nil {
+		updateMap["phone"] = *updateData.Phone
+	}
+
+	if err := h.service.UpdateUser(r.Context(), username, updateMap); err != nil {
+		h.responder.ErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.responder.WriteJSON(w, http.StatusOK, map[string]string{
+		"message": "user updated successfully",
+	})
 }
 
 // DeleteUser godoc

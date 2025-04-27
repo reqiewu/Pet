@@ -71,6 +71,23 @@ func ApplyMigrations(connString string) error {
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
-	log.Println("Migrations applied successfully")
+	conn, err := pgxpool.New(context.Background(), connString)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	var tableExists bool
+	err = conn.QueryRow(context.Background(),
+		`SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'users'
+        )`).Scan(&tableExists)
+
+	if !tableExists {
+		return fmt.Errorf("users table does not exist after migrations")
+	}
+
 	return nil
+
 }

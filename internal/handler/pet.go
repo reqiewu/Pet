@@ -5,6 +5,7 @@ import (
 	"PetStore/internal/service"
 	"PetStore/transport"
 	"encoding/json"
+	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strconv"
 )
@@ -35,12 +36,21 @@ func (h *PetHandler) AddPet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Устанавливаем дефолтные значения
+	if pet.Status == "" {
+		pet.Status = "available" // Дефолтный статус
+	}
+
+	if pet.Category == nil {
+		pet.Category = &model.Category{} // Дефолтная категория
+	}
+
 	if err := h.service.AddPet(r.Context(), &pet); err != nil {
-		h.responder.ErrorJSON(w, "failed to add pet", http.StatusBadRequest)
+		h.responder.ErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	h.responder.WriteJSON(w, http.StatusCreated, "pet added successfully")
+	h.responder.WriteJSON(w, http.StatusCreated, pet)
 }
 
 // UpdatePet godoc
@@ -79,18 +89,28 @@ func (h *PetHandler) UpdatePet(w http.ResponseWriter, r *http.Request) {
 // @Security ApiKeyAuth
 // @Router /pet/findByStatus [get]
 func (h *PetHandler) FindPetsByStatus(w http.ResponseWriter, r *http.Request) {
-	statusValues := r.URL.Query()["status"]
-	if len(statusValues) == 0 {
-		h.responder.ErrorJSON(w, "status is required", http.StatusBadRequest)
+	var st model.StatusRequest
+
+	// Декодирование тела запроса
+	if err := json.NewDecoder(r.Body).Decode(&st); err != nil {
+		h.responder.ErrorJSON(w, "неверное тело запроса", http.StatusBadRequest)
 		return
 	}
 
-	pets, err := h.service.FindPetsByStatus(r.Context(), statusValues)
+	// Проверка наличия статуса
+	if len(st.Status) == 0 {
+		h.responder.ErrorJSON(w, "статус обязателен", http.StatusBadRequest)
+		return
+	}
+
+	// Вызов сервисного слоя
+	pets, err := h.service.FindPetsByStatus(r.Context(), st.Status)
 	if err != nil {
-		h.responder.ErrorJSON(w, "failed to find pets by status", http.StatusBadRequest)
+		h.responder.ErrorJSON(w, "не удалось найти питомцев по статусу", http.StatusBadRequest)
 		return
 	}
 
+	// Отправка успешного ответа
 	h.responder.WriteJSON(w, http.StatusOK, pets)
 }
 
@@ -105,22 +125,16 @@ func (h *PetHandler) FindPetsByStatus(w http.ResponseWriter, r *http.Request) {
 // @Security ApiKeyAuth
 // @Router /pet/{petId} [get]
 func (h *PetHandler) GetPetById(w http.ResponseWriter, r *http.Request) {
-	petID := r.URL.Query().Get("id")
-	petIDInt, err := strconv.ParseInt(petID, 10, 64)
+	petID, err := strconv.ParseInt(chi.URLParam(r, "petId"), 10, 64)
 	if err != nil {
-		h.responder.ErrorJSON(w, "invalid request body", http.StatusBadRequest)
-	}
-	if petIDInt == 0 {
-		h.responder.ErrorJSON(w, "id is empty", http.StatusBadRequest)
+		h.responder.ErrorJSON(w, "invalid pet ID", http.StatusBadRequest)
 		return
 	}
 
-	pet, err := h.service.GetPetById(r.Context(), petIDInt)
+	pet, err := h.service.GetPetById(r.Context(), petID)
 	if err != nil {
-		h.responder.ErrorJSON(w, "failed to find pet by id", http.StatusBadRequest)
-	}
-	if pet == nil {
-		h.responder.ErrorJSON(w, "pet not found", http.StatusNotFound)
+		h.responder.ErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	h.responder.WriteJSON(w, http.StatusOK, pet)
@@ -139,7 +153,7 @@ func (h *PetHandler) GetPetById(w http.ResponseWriter, r *http.Request) {
 // @Security ApiKeyAuth
 // @Router /pet/{petId} [post]
 func (h *PetHandler) UpdatePetWithForm(w http.ResponseWriter, r *http.Request) {
-	petID, err := strconv.ParseInt("petId", 10, 64)
+	petID, err := strconv.ParseInt(chi.URLParam(r, "petId"), 10, 64)
 	if err != nil {
 		h.responder.ErrorJSON(w, "invalid pet ID", http.StatusBadRequest)
 		return
@@ -187,21 +201,23 @@ func (h *PetHandler) DeletePet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PetHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
-	petID, err := strconv.ParseInt("petId", 10, 64)
-	if err != nil {
-		h.responder.ErrorJSON(w, "invalid pet ID", http.StatusBadRequest)
+	var pet model.Pet
+	if err := json.NewDecoder(r.Body).Decode(&pet); err != nil {
+		h.responder.ErrorJSON(w, "invalid request body", http.StatusBadRequest)
+	}
+	if pet.ID <= 0 {
+		h.responder.ErrorJSON(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	url := r.URL.Query().Get("photoUrls")
-	if url == "" {
-		h.responder.ErrorJSON(w, "url is required", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.service.Upload(r.Context(), petID, url); err != nil {
-		h.responder.ErrorJSON(w, "failed to delete pet", http.StatusBadRequest)
+	if pet.ImageURL == "" {
+		h.responder.ErrorJSON(w, "image url is required", http.StatusBadRequest)
 		return
 	}
 
-	h.responder.WriteJSON(w, http.StatusOK, "pet deleted successfully")
+	if err := h.service.Upload(r.Context(), pet.ID, pet.ImageURL); err != nil {
+		h.responder.ErrorJSON(w, "failed to upload pet", http.StatusBadRequest)
+		return
+	}
+
+	h.responder.WriteJSON(w, http.StatusOK, "image url updated successfully")
 }
