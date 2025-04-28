@@ -5,11 +5,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
+	"strings"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
-	"log"
-	"strings"
 )
 
 type UserStore struct {
@@ -86,6 +87,11 @@ func (s *UserStore) UpdateUser(ctx context.Context, username string, updateData 
 			field = "password_hash" // Обновляем поле password_hash в БД
 		}
 
+		// Проверяем, что значение не nil
+		if value == nil {
+			continue
+		}
+
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, argPos))
 		args = append(args, value)
 		argPos++
@@ -103,9 +109,14 @@ func (s *UserStore) UpdateUser(ctx context.Context, username string, updateData 
 		argPos,
 	)
 
-	_, err := s.db.Exec(ctx, query, args...)
+	result, err := s.db.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	// Проверяем, что была обновлена хотя бы одна запись
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found")
 	}
 
 	return nil

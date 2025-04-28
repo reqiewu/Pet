@@ -4,9 +4,10 @@ import (
 	"PetStore/internal/model"
 	"context"
 	"errors"
+	"time"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"time"
 )
 
 type StoreRepository interface {
@@ -25,6 +26,30 @@ func NewStoreRepository(db *pgxpool.Pool) StoreRepository {
 }
 
 func (r *storeRepository) PlaceOrder(ctx context.Context, order *model.Order) error {
+	// Устанавливаем значение по умолчанию для status, если оно не задано
+	if order.Status == "" {
+		order.Status = "placed"
+	}
+
+	// Проверяем, нет ли уже активных заказов для этого питомца
+	var exists bool
+	err := r.db.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM orders 
+			WHERE pet_id = $1 
+			AND status IN ('placed', 'approved')
+		)`,
+		order.PetID,
+	).Scan(&exists)
+
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return errors.New("pet is already in an active order")
+	}
+
 	query := `INSERT INTO orders (user_id, pet_id, quantity, ship_date, status, complete) 
               VALUES ($1, $2, $3, $4, $5, $6) 
               RETURNING id, ship_date`

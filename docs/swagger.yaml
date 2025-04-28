@@ -1,0 +1,542 @@
+basePath: /
+definitions:
+  model.Category:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  model.Order:
+    properties:
+      complete:
+        type: boolean
+      id:
+        type: integer
+      petId:
+        type: integer
+      quantity:
+        type: integer
+      shipDate:
+        type: string
+      status:
+        type: string
+      userId:
+        type: integer
+    type: object
+  model.Pet:
+    properties:
+      category:
+        allOf:
+        - $ref: '#/definitions/model.Category'
+        description: omitempty для nil категории
+      id:
+        type: integer
+      name:
+        type: string
+      photoUrls:
+        description: Изменено с string на []string
+        items:
+          type: string
+        type: array
+      status:
+        type: string
+      tags:
+        items:
+          $ref: '#/definitions/model.Tag'
+        type: array
+    type: object
+  model.Tag:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  model.User:
+    properties:
+      email:
+        type: string
+      firstName:
+        type: string
+      id:
+        type: integer
+      lastName:
+        type: string
+      password:
+        type: string
+      phone:
+        type: string
+      userStatus:
+        type: integer
+      username:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API для управления питомцами и заказами
+  title: PetStore API
+  version: "1.0"
+paths:
+  /pet:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Pet object that needs to be added to the store
+        in: body
+        name: pet
+        required: true
+        schema:
+          $ref: '#/definitions/model.Pet'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.Pet'
+      security:
+      - ApiKeyAuth: []
+      summary: Add a new pet to the store
+      tags:
+      - pet
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Pet object that needs to be added to the store
+        in: body
+        name: pet
+        required: true
+        schema:
+          $ref: '#/definitions/model.Pet'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Pet'
+      security:
+      - ApiKeyAuth: []
+      summary: Update an existing pet
+      tags:
+      - pet
+  /pet/{petId}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Pet id to delete
+        in: path
+        name: petId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Deletes a pet
+      tags:
+      - pet
+    get:
+      consumes:
+      - application/json
+      description: Returns a single pet
+      parameters:
+      - description: ID of pet to return
+        in: path
+        name: petId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Pet'
+      security:
+      - ApiKeyAuth: []
+      summary: Find pet by ID
+      tags:
+      - pet
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: ID of pet that needs to be updated
+        in: path
+        name: petId
+        required: true
+        type: integer
+      - description: Updated name of the pet
+        in: formData
+        name: name
+        type: string
+      - description: Updated status of the pet
+        in: formData
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Updates a pet in the store with form data
+      tags:
+      - pet
+  /pet/{petId}/uploadImage:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ID of pet to update
+        in: path
+        name: petId
+        required: true
+        type: integer
+      - description: Image to upload
+        in: body
+        name: image
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Uploads an image
+      tags:
+      - pet
+  /pet/findByStatus:
+    get:
+      consumes:
+      - application/json
+      description: Multiple status values can be provided with comma separated strings
+      parameters:
+      - collectionFormat: multi
+        description: Status values that need to be considered for filter
+        in: query
+        items:
+          type: string
+        name: status
+        required: true
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.Pet'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: Finds Pets by status
+      tags:
+      - pet
+  /store/inventory:
+    get:
+      consumes:
+      - application/json
+      description: Returns a map of status codes to quantities
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Returns pet inventories by status
+      tags:
+      - store
+  /store/order:
+    post:
+      consumes:
+      - application/json
+      description: place an order for a pet
+      parameters:
+      - description: order placed for purchasing the pet
+        in: body
+        name: order
+        required: true
+        schema:
+          $ref: '#/definitions/model.Order'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Order'
+      security:
+      - ApiKeyAuth: []
+      summary: Place an order for a pet
+      tags:
+      - store
+  /store/order/{orderId}:
+    delete:
+      consumes:
+      - application/json
+      description: For valid response try integer IDs with positive integer value.
+        Negative or non-integer values will generate API errors
+      parameters:
+      - description: ID of the order that needs to be deleted
+        in: path
+        name: orderId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete purchase order by ID
+      tags:
+      - store
+    get:
+      consumes:
+      - application/json
+      description: For valid response try integer IDs with value >= 1 and <= 10. Other
+        values will generated exceptions
+      parameters:
+      - description: ID of pet that needs to be fetched
+        in: path
+        name: orderId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Order'
+      security:
+      - ApiKeyAuth: []
+      summary: Find purchase order by ID
+      tags:
+      - store
+  /user:
+    post:
+      consumes:
+      - application/json
+      description: This can only be done by the logged in user.
+      parameters:
+      - description: Created user object
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/model.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.User'
+      summary: Create user
+      tags:
+      - user
+  /user/{username}:
+    delete:
+      consumes:
+      - application/json
+      description: This can only be done by the logged in user.
+      parameters:
+      - description: The name that needs to be deleted
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete user
+      tags:
+      - user
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: The name that needs to be fetched. Use user1 for testing.
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.User'
+      summary: Get user by username
+      tags:
+      - user
+    put:
+      consumes:
+      - application/json
+      description: This can only be done by the logged in user.
+      parameters:
+      - description: name that need to be updated
+        in: path
+        name: username
+        required: true
+        type: string
+      - description: Updated user object
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/model.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.User'
+      summary: Updated user
+      tags:
+      - user
+  /user/createWithArray:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: List of user objects
+        in: body
+        name: users
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/model.User'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Creates list of users with given input array
+      tags:
+      - user
+  /user/createWithList:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: List of user objects
+        in: body
+        name: users
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/model.User'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Creates list of users with given input list
+      tags:
+      - user
+  /user/login:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: The username for login
+        in: query
+        name: username
+        required: true
+        type: string
+      - description: The password for login in clear text
+        in: query
+        name: password
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Logs user into the system
+      tags:
+      - user
+  /user/logout:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Logs out current loggedin user session
+      tags:
+      - user
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

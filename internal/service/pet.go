@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type PetService interface {
@@ -15,7 +16,8 @@ type PetService interface {
 	GetPetById(ctx context.Context, id int64) (*model.Pet, error)
 	UpdatePetWithForm(ctx context.Context, id int64, name string, status string) error
 	DeletePet(ctx context.Context, id int64) error
-	Upload(ctx context.Context, petID int64, imageURL string) error
+	Upload(ctx context.Context, petID int64, imageURLs []string) error
+	DebugPets(ctx context.Context) error
 }
 
 type petService struct {
@@ -52,12 +54,26 @@ func (s *petService) UpdatePet(ctx context.Context, pet *model.Pet) error {
 }
 
 func (s *petService) FindPetsByStatus(ctx context.Context, status string) ([]*model.Pet, error) {
+	fmt.Printf("Service: received status: %s\n", status)
+
 	// Валидация статуса
-	if status != "available" && status != "pending" && status != "sold" {
-		return nil, errors.New("неверный статус")
+	statuses := strings.Split(status, ",")
+	for _, s := range statuses {
+		if s != "available" && s != "pending" && s != "sold" {
+			fmt.Printf("Service: invalid status: %s\n", s)
+			return nil, fmt.Errorf("invalid status: %s", s)
+		}
 	}
 
-	return s.repo.FindPetsByStatus(ctx, status)
+	fmt.Printf("Service: calling repository with status: %s\n", status)
+	pets, err := s.repo.FindPetsByStatus(ctx, status)
+	if err != nil {
+		fmt.Printf("Service: repository error: %v\n", err)
+		return nil, fmt.Errorf("failed to find pets: %w", err)
+	}
+
+	fmt.Printf("Service: found %d pets\n", len(pets))
+	return pets, nil
 }
 
 func (s *petService) GetPetById(ctx context.Context, id int64) (*model.Pet, error) {
@@ -95,20 +111,23 @@ func (s *petService) DeletePet(ctx context.Context, id int64) error {
 	return s.repo.DeletePet(ctx, id)
 }
 
-func (s *petService) Upload(ctx context.Context, petID int64, imageURL string) error {
+func (s *petService) Upload(ctx context.Context, petID int64, imageURLs []string) error {
+	if petID <= 0 {
+		return errors.New("invalid pet ID")
+	}
+	if len(imageURLs) == 0 {
+		return errors.New("at least one image URL is required")
+	}
+
+	// Проверяем существование питомца
 	_, err := s.repo.GetPetByID(ctx, petID)
 	if err != nil {
 		return fmt.Errorf("pet with id %d not found", petID)
 	}
-	if petID <= 0 {
-		return errors.New("invalid pet ID")
-	}
-	if imageURL == "" {
-		return errors.New("URL image is required")
-	}
-	err = s.repo.UploadImage(ctx, petID, imageURL)
-	if err != nil {
-		return err
-	}
-	return nil
+
+	return s.repo.UploadImage(ctx, petID, imageURLs)
+}
+
+func (s *petService) DebugPets(ctx context.Context) error {
+	return s.repo.DebugPets(ctx)
 }

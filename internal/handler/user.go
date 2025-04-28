@@ -6,9 +6,10 @@ import (
 	"PetStore/transport"
 	"encoding/json"
 	"fmt"
-	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type UserHandler struct {
@@ -26,8 +27,8 @@ func NewUserHandler(service service.UserService, responder transport.JSONRespond
 // @Tags user
 // @Accept  json
 // @Produce  json
-// @Param user body models.User true "Created user object"
-// @Success 200 {object} models.User
+// @Param user body model.User true "Created user object"
+// @Success 200 {object} model.User
 // @Router /user [post]
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var user model.User
@@ -52,7 +53,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 // @Tags user
 // @Accept  json
 // @Produce  json
-// @Param users body []models.User true "List of user objects"
+// @Param users body []model.User true "List of user objects"
 // @Success 200 {object} map[string]string
 // @Router /user/createWithArray [post]
 func (h *UserHandler) CreateUsersWithArray(w http.ResponseWriter, r *http.Request) {
@@ -72,15 +73,10 @@ func (h *UserHandler) CreateUsersWithArray(w http.ResponseWriter, r *http.Reques
 		h.responder.ErrorJSON(w, "failed to create users: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	response := struct {
-		Message string  `json:"message"`
-		UserIDs []int64 `json:"userIds"`
-	}{
-		Message: fmt.Sprintf("Successfully created %d users", len(ids)),
-		UserIDs: ids,
-	}
 
-	h.responder.WriteJSON(w, http.StatusCreated, response)
+	h.responder.WriteJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Successfully created %d users", len(ids)),
+	})
 }
 
 // CreateUsersWithList godoc
@@ -88,7 +84,7 @@ func (h *UserHandler) CreateUsersWithArray(w http.ResponseWriter, r *http.Reques
 // @Tags user
 // @Accept  json
 // @Produce  json
-// @Param users body []models.User true "List of user objects"
+// @Param users body []model.User true "List of user objects"
 // @Success 200 {object} map[string]string
 // @Router /user/createWithList [post]
 func (h *UserHandler) CreateUsersWithList(w http.ResponseWriter, r *http.Request) {
@@ -103,15 +99,10 @@ func (h *UserHandler) CreateUsersWithList(w http.ResponseWriter, r *http.Request
 		h.responder.ErrorJSON(w, "failed to create users: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	response := struct {
-		Message string  `json:"message"`
-		UserIDs []int64 `json:"userIds"`
-	}{
-		Message: fmt.Sprintf("Successfully created %d users", len(ids)),
-		UserIDs: ids,
-	}
 
-	h.responder.WriteJSON(w, http.StatusCreated, response)
+	h.responder.WriteJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Successfully created %d users", len(ids)),
+	})
 }
 
 // LoginUser godoc
@@ -124,20 +115,16 @@ func (h *UserHandler) CreateUsersWithList(w http.ResponseWriter, r *http.Request
 // @Success 200 {object} map[string]string
 // @Router /user/login [get]
 func (h *UserHandler) LoginUser(w http.ResponseWriter, r *http.Request) {
-	var req model.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.responder.ErrorJSON(w, "invalid request format", http.StatusBadRequest)
-		return
-	}
+	username := r.URL.Query().Get("username")
+	password := r.URL.Query().Get("password")
 
-	if req.UserName == "" || req.Password == "" {
+	if username == "" || password == "" {
 		h.responder.ErrorJSON(w, "username and password are required", http.StatusBadRequest)
 		return
 	}
 
-	token, err := h.service.LoginUser(r.Context(), req.UserName, req.Password)
+	token, err := h.service.LoginUser(r.Context(), username, password)
 	if err != nil {
-		// Различаем типы ошибок для клиента
 		errorMsg := "authentication failed"
 		if strings.Contains(err.Error(), "user not found") {
 			errorMsg = "user not found"
@@ -149,7 +136,9 @@ func (h *UserHandler) LoginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.WriteJSON(w, http.StatusOK, model.LoginResponse{Token: token})
+	h.responder.WriteJSON(w, http.StatusOK, map[string]string{
+		"token": token,
+	})
 }
 
 // LogoutUser godoc
@@ -172,22 +161,16 @@ func (h *UserHandler) LogoutUser(w http.ResponseWriter, r *http.Request) {
 // @Accept  json
 // @Produce  json
 // @Param username path string true "The name that needs to be fetched. Use user1 for testing."
-// @Success 200 {object} models.User
+// @Success 200 {object} model.User
 // @Router /user/{username} [get]
 func (h *UserHandler) GetUserByName(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		Username string `json:"username"`
+	username := chi.URLParam(r, "username")
+	if username == "" {
+		h.responder.ErrorJSON(w, "username is required", http.StatusBadRequest)
+		return
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		h.responder.ErrorJSON(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	if request.Username == "" {
-		h.responder.ErrorJSON(w, "username is empty", http.StatusBadRequest)
-		return
-	}
-	user, err := h.service.GetUserByUsername(r.Context(), request.Username)
+	user, err := h.service.GetUserByUsername(r.Context(), username)
 	if err != nil {
 		h.responder.ErrorJSON(w, "user not found", http.StatusNotFound)
 		return
@@ -203,8 +186,8 @@ func (h *UserHandler) GetUserByName(w http.ResponseWriter, r *http.Request) {
 // @Accept  json
 // @Produce  json
 // @Param username path string true "name that need to be updated"
-// @Param user body models.User true "Updated user object"
-// @Success 200 {object} models.User
+// @Param user body model.User true "Updated user object"
+// @Success 200 {object} model.User
 // @Router /user/{username} [put]
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "username")
@@ -246,9 +229,14 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responder.WriteJSON(w, http.StatusOK, map[string]string{
-		"message": "user updated successfully",
-	})
+	// Получаем обновленного пользователя для ответа
+	updatedUser, err := h.service.GetUserByUsername(r.Context(), username)
+	if err != nil {
+		h.responder.ErrorJSON(w, "failed to get updated user", http.StatusInternalServerError)
+		return
+	}
+
+	h.responder.WriteJSON(w, http.StatusOK, updatedUser)
 }
 
 // DeleteUser godoc

@@ -1,0 +1,245 @@
+openapi: 3.0.0
+info:
+  title: PetStore API
+  description: API для управления питомцами и заказами
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Локальный сервер разработки
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: JWT токен авторизации
+
+paths:
+  /pet:
+    post:
+      summary: Добавить нового питомца
+      tags: [pet]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pet'
+      responses:
+        '200':
+          description: Успешное создание питомца
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '400':
+          description: Неверный запрос
+        '401':
+          description: Не авторизован
+
+  /pet/{petId}:
+    get:
+      summary: Найти питомца по ID
+      tags: [pet]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Успешный поиск питомца
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '404':
+          description: Питомец не найден
+        '401':
+          description: Не авторизован
+
+  /pet/findByStatus:
+    get:
+      summary: Найти питомцев по статусу
+      tags: [pet]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [available, pending, sold]
+      responses:
+        '200':
+          description: Успешный поиск питомцев
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pet'
+        '400':
+          description: Неверный статус
+        '401':
+          description: Не авторизован
+
+  /store/order:
+    post:
+      summary: Создать заказ
+      tags: [store]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Order'
+      responses:
+        '200':
+          description: Успешное создание заказа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Неверный запрос
+        '409':
+          description: Питомец уже в активном заказе
+        '401':
+          description: Не авторизован
+
+  /store/order/{orderId}:
+    get:
+      summary: Найти заказ по ID
+      tags: [store]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Успешный поиск заказа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Заказ не найден
+        '401':
+          description: Не авторизован
+
+    delete:
+      summary: Удалить заказ
+      tags: [store]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Успешное удаление заказа
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: Заказ не найден
+        '401':
+          description: Не авторизован
+
+  /store/inventory:
+    get:
+      summary: Получить инвентарь
+      tags: [store]
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Успешное получение инвентаря
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+        '401':
+          description: Не авторизован
+
+components:
+  schemas:
+    Pet:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category'
+        photoUrls:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        status:
+          type: string
+          enum: [available, pending, sold]
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        petId:
+          type: integer
+        userId:
+          type: integer
+        quantity:
+          type: integer
+        shipDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [placed, approved, delivered]
+        complete:
+          type: boolean 

@@ -3,13 +3,14 @@ package db
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	"log"
-	"os"
 )
 
 type Config struct {
@@ -67,6 +68,21 @@ func ApplyMigrations(connString string) error {
 	}
 	defer m.Close()
 
+	// Проверяем состояние миграций
+	version, dirty, err := m.Version()
+	if err != nil && err != migrate.ErrNilVersion {
+		return fmt.Errorf("failed to get migration version: %w", err)
+	}
+
+	// Если миграция в "грязном" состоянии, пытаемся исправить
+	if dirty {
+		log.Printf("Found dirty migration version %d, attempting to fix...", version)
+		if err := m.Force(int(version)); err != nil {
+			return fmt.Errorf("failed to force migration version: %w", err)
+		}
+	}
+
+	// Применяем миграции
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
@@ -89,5 +105,4 @@ func ApplyMigrations(connString string) error {
 	}
 
 	return nil
-
 }

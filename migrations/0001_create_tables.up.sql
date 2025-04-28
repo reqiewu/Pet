@@ -1,4 +1,3 @@
-
 CREATE TYPE pet_status AS ENUM ('available', 'pending', 'sold');
 
 CREATE TYPE order_status AS ENUM ('placed', 'approved', 'delivered');
@@ -33,7 +32,7 @@ CREATE TABLE pets (
                       name VARCHAR(255) NOT NULL,
                       category_id INTEGER REFERENCES pet_categories(id),
                       status pet_status NOT NULL,
-                      photo_urls TEXT[] DEFAULT '{}',
+                      photo_urls TEXT[] DEFAULT ARRAY[]::text[],
                       owner_id INTEGER REFERENCES users(id)
 );
 
@@ -54,3 +53,15 @@ CREATE TABLE orders (
                         status order_status NOT NULL,
                         complete BOOLEAN DEFAULT FALSE
 );
+
+-- Добавляем ограничения, если они еще не существуют
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_pet_category_name') THEN
+        ALTER TABLE pet_categories ADD CONSTRAINT unique_pet_category_name UNIQUE (name);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_pet_tag_name') THEN
+        ALTER TABLE pet_tags ADD CONSTRAINT unique_pet_tag_name UNIQUE (name);
+    END IF;
+END $$;

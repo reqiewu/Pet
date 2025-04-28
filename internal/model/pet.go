@@ -5,7 +5,7 @@ type Pet struct {
 	Name     string    `json:"name"`
 	Category *Category `json:"category,omitempty"` // omitempty для nil категории
 	Status   string    `json:"status"`
-	ImageURL string    `json:"photoUrls"` // Изменили имя поля для соответствия API
+	ImageURL []string  `json:"photoUrls"` // Изменено с string на []string
 	Tags     []*Tag    `json:"tags,omitempty"`
 }
 

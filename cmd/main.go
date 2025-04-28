@@ -5,7 +5,6 @@ import (
 	"PetStore/internal/handler"
 	"PetStore/transport"
 	"context"
-	"github.com/joho/godotenv"
 	"log"
 	"net/http"
 	"os"
@@ -13,11 +12,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+
+	_ "PetStore/docs" // Импорт документации Swagger
 	"PetStore/internal/repository"
 	"PetStore/internal/service"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/jwtauth/v5"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func init() {
@@ -26,6 +30,15 @@ func init() {
 		log.Fatal("Error loading .env file")
 	}
 }
+
+// @title PetStore API
+// @version 1.0
+// @description API для управления питомцами и заказами
+// @host localhost:8080
+// @BasePath /
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 func main() {
 	// Загрузка конфигурации
 	ctx := context.Background()
@@ -60,15 +73,19 @@ func main() {
 
 	// Public routes (не требуют аутентификации)
 	r.Group(func(r chi.Router) {
-		r.Post("/api/user", userHandler.CreateUser)
-		r.Get("/api/user/createWithArray", userHandler.CreateUsersWithArray)
-		r.Post("/api/user/createWithList", userHandler.CreateUsersWithList)
-		r.Get("/api/user/login", userHandler.LoginUser)
-		r.Get("/api/user/logout", userHandler.LogoutUser)
-		r.Get("/api/user/{username}", userHandler.GetUserByName)
-		r.Post("/api/store/order", storeHandler.PlaceOrder)
-		r.Get("/api/store/order/{orderId}", storeHandler.GetOrderById)
-		r.Delete("/api/store/order/{orderId}", storeHandler.DeleteOrder)
+		// User routes
+		r.Post("/user", userHandler.CreateUser)
+		r.Post("/user/createWithArray", userHandler.CreateUsersWithArray)
+		r.Post("/user/createWithList", userHandler.CreateUsersWithList)
+		r.Get("/user/login", userHandler.LoginUser)
+		r.Get("/user/logout", userHandler.LogoutUser)
+		r.Get("/user/{username}", userHandler.GetUserByName)
+
+		// Store routes
+		r.Get("/store/inventory", storeHandler.GetInventory)
+		r.Post("/store/order", storeHandler.PlaceOrder)
+		r.Get("/store/order/{orderId}", storeHandler.GetOrderById)
+		r.Delete("/store/order/{orderId}", storeHandler.DeleteOrder)
 	})
 
 	// Protected routes (требуют JWT)
@@ -78,7 +95,7 @@ func main() {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				token, _, _ := jwtauth.FromContext(r.Context())
 				if token == nil {
-					http.Error(w, "Forbidden", http.StatusForbidden) // 403
+					http.Error(w, "Forbidden", http.StatusForbidden)
 					return
 				}
 				next.ServeHTTP(w, r)
@@ -86,23 +103,26 @@ func main() {
 		})
 
 		// User routes
-		r.Put("/api/user/{username}", userHandler.UpdateUser)
-		r.Delete("/api/user/{username}", userHandler.DeleteUser)
+		r.Put("/user/{username}", userHandler.UpdateUser)
+		r.Delete("/user/{username}", userHandler.DeleteUser)
 
 		// Pet routes
-		r.Post("/api/pet", petHandler.AddPet)
-		r.Put("/api/pet", petHandler.UpdatePet)
-		r.Get("/api/pet/findByStatus", petHandler.FindPetsByStatus)
-		r.Get("/api/pet/{petId}", petHandler.GetPetById)
-		r.Post("/api/pet/{petId}", petHandler.UpdatePetWithForm)
-		r.Delete("/api/pet/{petId}", petHandler.DeletePet)
-		r.Post("/api/pet/{petId}", petHandler.UploadImage)
-		// Store routes
-		r.Get("/api/store/inventory", storeHandler.GetInventory)
+		r.Post("/pet", petHandler.AddPet)
+		r.Put("/pet", petHandler.UpdatePet)
+		r.Get("/pet/findByStatus", petHandler.FindPetsByStatus)
+		r.Get("/pet/{petId}", petHandler.GetPetById)
+		r.Post("/pet/{petId}", petHandler.UpdatePetWithForm)
+		r.Delete("/pet/{petId}", petHandler.DeletePet)
+		r.Post("/pet/{petId}/uploadImage", petHandler.UploadImage)
 	})
 
-	// Swagger UI (если используется)
-	r.Handle("/swagger/*", http.StripPrefix("/swagger/", http.FileServer(http.Dir("./swagger"))))
+	// Swagger UI
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
+		httpSwagger.DeepLinking(true),
+		httpSwagger.DocExpansion("none"),
+		httpSwagger.DomID("swagger-ui"),
+	))
 
 	// HTTP сервер
 	srv := &http.Server{

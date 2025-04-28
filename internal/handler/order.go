@@ -5,9 +5,11 @@ import (
 	"PetStore/internal/service"
 	"PetStore/transport"
 	"encoding/json"
-	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strconv"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type StoreHandler struct {
@@ -40,12 +42,12 @@ func (h *StoreHandler) GetInventory(w http.ResponseWriter, r *http.Request) {
 
 // PlaceOrder godoc
 // @Summary Place an order for a pet
-// @Description
+// @Description place an order for a pet
 // @Tags store
 // @Accept  json
 // @Produce  json
-// @Param order body models.Order true "order placed for purchasing the pet"
-// @Success 200 {object} models.Order
+// @Param order body model.Order true "order placed for purchasing the pet"
+// @Success 200 {object} model.Order
 // @Security ApiKeyAuth
 // @Router /store/order [post]
 func (h *StoreHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +58,13 @@ func (h *StoreHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.PlaceOrder(r.Context(), &order); err != nil {
-		http.Error(w, "failed to placing order", http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "invalid") {
+			h.responder.ErrorJSON(w, err.Error(), http.StatusBadRequest)
+		} else if strings.Contains(err.Error(), "already in an active order") {
+			h.responder.ErrorJSON(w, err.Error(), http.StatusConflict)
+		} else {
+			h.responder.ErrorJSON(w, "failed to place order", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -70,7 +78,7 @@ func (h *StoreHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 // @Accept  json
 // @Produce  json
 // @Param orderId path int true "ID of pet that needs to be fetched"
-// @Success 200 {object} models.Order
+// @Success 200 {object} model.Order
 // @Security ApiKeyAuth
 // @Router /store/order/{orderId} [get]
 func (h *StoreHandler) GetOrderById(w http.ResponseWriter, r *http.Request) {
@@ -104,16 +112,22 @@ func (h *StoreHandler) GetOrderById(w http.ResponseWriter, r *http.Request) {
 // @Security ApiKeyAuth
 // @Router /store/order/{orderId} [delete]
 func (h *StoreHandler) DeleteOrder(w http.ResponseWriter, r *http.Request) {
-	orderID, err := strconv.ParseInt("orderId", 10, 64)
+	orderID, err := strconv.ParseInt(chi.URLParam(r, "orderId"), 10, 64)
 	if err != nil {
 		h.responder.ErrorJSON(w, "invalid order ID", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.service.DeleteOrder(r.Context(), orderID); err != nil {
-		h.responder.ErrorJSON(w, "failed to delete order", http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "not found") {
+			h.responder.ErrorJSON(w, err.Error(), http.StatusNotFound)
+		} else {
+			h.responder.ErrorJSON(w, "failed to delete order", http.StatusInternalServerError)
+		}
 		return
 	}
 
-	h.responder.WriteJSON(w, http.StatusOK, "order deleted")
+	h.responder.WriteJSON(w, http.StatusOK, map[string]string{
+		"message": "Order deleted successfully",
+	})
 }
